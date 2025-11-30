@@ -30,7 +30,7 @@ public class Sample : MonoBehaviour
     void Start()
     {
         RubyText.SetWH(900, 300);
-        RubyText.SetFontSize(160);
+        RubyText.SetFontSize(50);
 
         RubyText.SetText("この<color=red>{数:かず}</color>は、{一般的:いっぱんてき}に\r\n「{ナ:na}{ノ:no}」という\r\n{単位:たんい}{接頭辞:せっとうじ}を{使用:しよう}して{表:あらわ}されます。");
 

@@ -1,5 +1,4 @@
-﻿
-// Copyright (c) catsnipe
+﻿// Copyright (c) catsnipe
 // Released under the MIT license
 
 // Permission is hereby granted, free of charge, to any person obtaining a 
@@ -20,6 +19,8 @@
 // LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION 
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION 
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+#define TextMeshPro_Ver3_2_OR_LATER
 
 using System.Collections;
 using System.Collections.Generic;
@@ -51,7 +52,6 @@ public class RubyText : MonoBehaviour
     /// 1文字描画終了
     /// </summary>
     public System.Action    OneWordDrawn;
-    
     /// <summary>
     /// テキスト描画終了
     /// </summary>
@@ -223,6 +223,27 @@ public class RubyText : MonoBehaviour
 
             ruby.color = new Color(r, g, b, 0);
         }
+
+        public void SetTmpInfo2(TMP_CharacterInfo[] characterInfos, int posTop, float rubyPositionAdjust)
+        {
+            this.characterInfos = characterInfos;
+            this.posTop         = posTop;
+            this.posBtm         = posTop;
+
+            var top = this.characterInfos[posTop];
+            var btm = this.characterInfos[posTop];
+
+            float y = top.ascender + rubyPositionAdjust;
+            float x = (top.topLeft.x + btm.topRight.x) / 2;
+
+            rubyRect.SetXY(x, y);
+
+            float r = (float)this.characterInfos[this.posBtm].color.r / 255;
+            float g = (float)this.characterInfos[this.posBtm].color.g / 255;
+            float b = (float)this.characterInfos[this.posBtm].color.b / 255;
+
+            ruby.color = new Color(r, g, b, 0);
+        }
     }
 
     /// <summary>
@@ -248,7 +269,11 @@ public class RubyText : MonoBehaviour
             Alpha    = 0;
             W        = 0;
             H        = 0;
+#if TextMeshPro_Ver3_2_OR_LATER
             EnableWordWrapping = text.textWrappingMode != TextWrappingModes.NoWrap;
+#else
+            EnableWordWrapping = text.enableWordWrapping == true;
+#endif
         }
     }
 
@@ -259,7 +284,8 @@ public class RubyText : MonoBehaviour
     int                         textRubyCount;
     UpdateComparer              updateComparer;
     TMP_CharacterInfo[]         cinfos;
-    Regex                       searchAlpha = new Regex("<alpha=#[^>]+?>", RegexOptions.Compiled);
+    Regex                       searchAlpha = new Regex("<alpha=#[^>]+?>");
+
 
     float                       fontSizeMax;
     float                       fontSizeEx;
@@ -270,7 +296,6 @@ public class RubyText : MonoBehaviour
     int                         position;
     float                       alpha;
     int                         crlfCount;
-
     bool                        isBracketMessage;
 
     CoroutineInfo               coText;
@@ -307,7 +332,11 @@ public class RubyText : MonoBehaviour
             update = true;
         }
 
+#if TextMeshPro_Ver3_2_OR_LATER
         bool wrapping = Text.textWrappingMode != TextWrappingModes.NoWrap;
+#else
+        bool wrapping = Text.enableWordWrapping == true;
+#endif
 
         if (updateComparer.EnableWordWrapping != wrapping)
         {
@@ -446,6 +475,8 @@ public class RubyText : MonoBehaviour
         // <> ～ </> コマンドなし
         var notagMessage = Regex.Replace(message, "<[^<|>]+>", "");
 
+        var cinfos = Text.GetTextInfo(Text.text).characterInfo;
+
         for ( ; ; )
         {
             int top = notagMessage.IndexOf("{");
@@ -463,20 +494,24 @@ public class RubyText : MonoBehaviour
                 // コマンド
                 string[] coms    = command.Split(':');
 
-                if (textRubyCount+1 > textRubys.Count)
+                if (coms.Length == 2)
                 {
-                    // なければバッファ拡張
-                    textRubys.Add(new TextRuby(textRubyCount, Ruby, Text));
+                    if (textRubyCount+1 > textRubys.Count)
+                    {
+                        // なければバッファ拡張
+                        textRubys.Add(new TextRuby(textRubyCount, Ruby, Text));
+                    }
+
+                    var ruby = textRubys[textRubyCount++];
+                    //ruby.TextPosition = top;
+                    ruby.Word         = coms[0];
+                    ruby.RubyWord     = coms[1];
+
+                    //Debug.Log($"{top} {string.Join(",", coms)}");
+
                 }
 
-                var ruby = textRubys[textRubyCount++];
-                ruby.TextPosition = top;
-                ruby.Word         = coms[0];
-                ruby.RubyWord     = coms[1];
-
-                //Debug.Log($"{top} {string.Join(",", coms)}");
-
-                notagMessage      = notagMessage.Remove(top, btm-top+1).Insert(top, coms[0]);
+                notagMessage = notagMessage.Remove(top, btm-top+1).Insert(top, coms[0]);
             }
             catch
             {
@@ -543,12 +578,12 @@ public class RubyText : MonoBehaviour
         {
             char word = message[positionIndexes[position]];
 
-            if (word == '（')
+            if (word == '（' || word == '(')
             {
                 isBracketMessage = true;
             }
             else
-            if (position < positionIndexes.Count-1 && word == '）')
+            if (position < positionIndexes.Count-1 && (word == '）' || word == ')'))
             {
                 isBracketMessage = false;
             }
@@ -568,6 +603,8 @@ public class RubyText : MonoBehaviour
                 case '?':
                 case ',':
                 case '.':
+                case '(':
+                case ')':
                     return false;
                 default:
                     return true;
@@ -591,6 +628,7 @@ public class RubyText : MonoBehaviour
             switch (word)
             {
                 case '（':
+                case '(':
                     return true;
             }
         }
@@ -606,7 +644,7 @@ public class RubyText : MonoBehaviour
     {
         return isBracketMessage;
     }
-    
+
     /// <summary>
     /// RectXY
     /// </summary>
@@ -857,7 +895,7 @@ public class RubyText : MonoBehaviour
 
         // 全文字が表示された状態のフォントサイズがフォント最大サイズとする
         // （これをしておかないと、文字が少ない時バカでかい文字になるなど、不安定なテキスト描画になる）
-        Text.fontSizeMax = Text.fontSize + fontSizeEx;
+        Text.fontSizeMax = fontSizeMax + fontSizeEx;
 
         // 出そろった文字情報を元にルビを設定
         refreshRuby();
@@ -869,7 +907,8 @@ public class RubyText : MonoBehaviour
 
         while (true)
         {
-            var msg = Text.text;
+            var  msg   = Text.text;
+            bool isEnd = false;
 
 //DDisp.Log($"{position} {alpha}");
             // 文章が変わったり、表示位置が変化
@@ -938,11 +977,12 @@ public class RubyText : MonoBehaviour
                     if (alpha == 1 && this.position == GetTextLength()-1)
                     {
                         msg = searchAlpha.Replace(msg, "");
+                        isEnd = true;
                     }
                     else
                     {
                         int ia = (int)(255 * alpha);
-                        msg = searchAlpha.Replace(msg, $"<alpha=#{ia.ToString("x2")}>", 1);
+                        msg = searchAlpha.Replace(msg, $"<alpha=#{ia.ToString("x2")}>");
                     }
 
                     refreshRubyAlpha(alpha);
@@ -957,7 +997,7 @@ public class RubyText : MonoBehaviour
                 Text.SetText(msg);
             }
 
-            if (alpha == 1 && this.position == GetTextLength()-1)
+            if (isEnd == true)
             {
                 break;
             }
@@ -1038,13 +1078,15 @@ public class RubyText : MonoBehaviour
 
             if (ruby.Word.Length == ruby.RubyWord.Length)
             {
+//                ruby.SetTmpInfo2(cinfos, posTop+i, adjust);
                 ruby.SetTmpInfo(cinfos, posTop, posBtm, adjust);
             }
             else
             {
                 ruby.SetTmpInfo(cinfos, posTop, posBtm, adjust);
             }
-            ruby.SetFontSize(Text.fontSize + fontSizeEx);
+            //ruby.SetFontSize(fontSizeMax + fontSizeEx);
+            ruby.SetFontSize(fontSizeMax);
             ruby.Refresh();
             ruby.SetActive(true);
         }
