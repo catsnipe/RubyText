@@ -974,16 +974,8 @@ public class RubyText : MonoBehaviour
             {
                 if (msg.Length > 1)
                 {
-                    if (alpha == 1 && this.position == GetTextLength()-1)
-                    {
-                        msg = searchAlpha.Replace(msg, "");
-                        isEnd = true;
-                    }
-                    else
-                    {
-                        int ia = (int)(255 * alpha);
-                        msg = searchAlpha.Replace(msg, $"<alpha=#{ia.ToString("x2")}>");
-                    }
+                    int ia = (int)(255 * alpha);
+                    msg = searchAlpha.Replace(msg, $"<alpha=#{ia.ToString("x2")}>");
 
                     refreshRubyAlpha(alpha);
                 }
@@ -997,8 +989,9 @@ public class RubyText : MonoBehaviour
                 Text.SetText(msg);
             }
 
-            if (isEnd == true)
+            if (alpha == 1 && this.position == GetTextLength()-1)
             {
+                msg = searchAlpha.Replace(msg, "");
                 break;
             }
 
