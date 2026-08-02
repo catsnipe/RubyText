@@ -60,6 +60,8 @@ public class RubyText : MonoBehaviour
     class TextRuby
     {
         public int          TextPosition;
+        public int          PosTop;
+        public int          PosBottom;
         public string       Word;
         public string       RubyWord;
 
@@ -84,6 +86,12 @@ public class RubyText : MonoBehaviour
             ruby = Instantiate(rubyBase, parentText.transform);
             ruby.name = $"ruby {no}";
 
+            // 非アクティブなテンプレートから生成すると TMP の Awake が走らず、
+            // preferredWidth 参照時に TMP 内部で NullReferenceException になるため、
+            // 一度アクティブ化して内部初期化を済ませる
+            ruby.SetActive(true);
+            ruby.SetActive(false);
+            
             rubyRect = ruby.GetComponent<RectTransform>();
             rubyRect.SetHeight(ruby.fontSize);
         }
@@ -221,7 +229,7 @@ public class RubyText : MonoBehaviour
             float g = (float)this.characterInfos[this.posBtm].color.g / 255;
             float b = (float)this.characterInfos[this.posBtm].color.b / 255;
 
-            ruby.color = new Color(r, g, b, 0);
+            ruby.color = new Color(r, g, b, ruby.color.a);
         }
 
         public void SetTmpInfo2(TMP_CharacterInfo[] characterInfos, int posTop, float rubyPositionAdjust)
@@ -242,7 +250,7 @@ public class RubyText : MonoBehaviour
             float g = (float)this.characterInfos[this.posBtm].color.g / 255;
             float b = (float)this.characterInfos[this.posBtm].color.b / 255;
 
-            ruby.color = new Color(r, g, b, 0);
+            ruby.color = new Color(r, g, b, ruby.color.a);
         }
     }
 
@@ -284,7 +292,7 @@ public class RubyText : MonoBehaviour
     int                         textRubyCount;
     UpdateComparer              updateComparer;
     TMP_CharacterInfo[]         cinfos;
-    Regex                       searchAlpha = new Regex("<alpha=#[^>]+?>");
+    Regex                       searchAlpha = new Regex(@"<alpha=#(?!00>)[^>]+?>");
 
 
     float                       fontSizeMax;
@@ -506,7 +514,8 @@ public class RubyText : MonoBehaviour
                     //ruby.TextPosition = top;
                     ruby.Word         = coms[0];
                     ruby.RubyWord     = coms[1];
-
+                    ruby.PosTop       = top;
+                    ruby.PosBottom    = top + coms[0].Length - 1;
                     //Debug.Log($"{top} {string.Join(",", coms)}");
 
                 }
@@ -519,6 +528,8 @@ public class RubyText : MonoBehaviour
                 break;
             }
         }
+
+        refreshRubyAlpha(0);
 
         // {} コマンドなしの、TextMeshProUGUI に渡すテキスト
         message = Regex.Replace(message, ":[^\\}]+\\}", "").Replace("{", "");
@@ -752,6 +763,8 @@ public class RubyText : MonoBehaviour
         Text.fontSizeMax = max + fontSizeEx;
         Text.fontSize    = max + fontSizeEx;
         fontSizeMax      = max;
+
+        refreshRuby();
     }
 
     /// <summary>
@@ -770,6 +783,8 @@ public class RubyText : MonoBehaviour
         Text.fontSizeMax = size + fontSizeEx;
         Text.fontSize    = size + fontSizeEx;
         fontSizeMax      = size;
+
+        refreshRuby();
     }
 
     /// <summary>
@@ -780,6 +795,8 @@ public class RubyText : MonoBehaviour
         Text.fontSizeMax = fontSizeMax + size;
         Text.fontSize    = fontSizeMax + size;
         fontSizeEx       = size;
+
+        refreshRuby();
     }
 
     /// <summary>
@@ -908,7 +925,6 @@ public class RubyText : MonoBehaviour
         while (true)
         {
             var  msg   = Text.text;
-            bool isEnd = false;
 
 //DDisp.Log($"{position} {alpha}");
             // 文章が変わったり、表示位置が変化
@@ -917,6 +933,10 @@ public class RubyText : MonoBehaviour
                 if (positionIndexes != null && position >= 0 && position < positionIndexes.Count)
                 {
                     int    ia   = (int)(255 * alpha);
+                    if (ia == 0)
+                    {
+                        ia = 1;
+                    }
                     string taga = $"<alpha=#{ia.ToString("x2")}>";
 
                     if (IsDrawAtOnce == true)
@@ -941,6 +961,9 @@ public class RubyText : MonoBehaviour
 
                         if (IsFixedPosition == true)
                         {
+                            // <color> タグがあると alpha が 0xff に戻ってしまうため、タグ直後に <alpha=#00> を挿入する
+                            msgAfter = Regex.Replace(msgAfter, "(?<tag><color=[^>]+>)", "${tag}<alpha=#00>");
+                            msgAfter = msgAfter.Replace("</color>", "</color><alpha=#00>");
                             msg += "<alpha=#00>" + msgAfter;
                         }
                         else
@@ -1035,27 +1058,8 @@ public class RubyText : MonoBehaviour
                 adjust = rubyAdjustByFont[Text.font.name];
             }
 
-            int no = 0;
-
-            for (int j = posBtm; j < cinfos.Length; j++)
-            {
-                if (cinfos[j].character == ruby.Word[no])
-                {
-                    if (no == 0)
-                    {
-                        posTop = j;
-                    }
-                    if (++no >= ruby.Word.Length)
-                    {
-                        posBtm = j;
-                        break;
-                    }
-                }
-                else
-                {
-                    no = 0;
-                }
-            }
+            posTop = ruby.PosTop;
+            posBtm = ruby.PosBottom;
 
             // ルビを振る文字列のうち、同じ高さの終端文字を検索する
             // （文字列が自動改行などで２行にまたがってしまう問題の対策）
@@ -1083,8 +1087,6 @@ public class RubyText : MonoBehaviour
             ruby.Refresh();
             ruby.SetActive(true);
         }
-
-        refreshRubyAlpha(0);
     }
 
     /// <summary>
